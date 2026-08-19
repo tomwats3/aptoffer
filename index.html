@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AptOffer — LA Multifamily On-Market Map</title>
+<meta name="description" content="Every multifamily and commercial property on the market in Los Angeles County — mapped, priced, and current. Updated daily.">
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="AptOffer">
+<meta property="og:title" content="AptOffer — LA Multifamily On-Market Map">
+<meta property="og:description" content="Every multifamily and commercial property on the market in Los Angeles County — mapped, priced, and current. Updated daily.">
+<meta property="og:url" content="https://aptoffer.com/">
+<meta property="og:image" content="https://aptoffer.com/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="AptOffer — LA multifamily and commercial listings, mapped.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="AptOffer — LA Multifamily On-Market Map">
+<meta name="twitter:description" content="Every multifamily and commercial property on the market in Los Angeles County — mapped, priced, and current.">
+<meta name="twitter:image" content="https://aptoffer.com/og.png">
+<meta name="theme-color" content="#141413">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{
+  --surface-0:#141413; --surface-1:#1a1a19; --surface-2:#232322; --line:#383835;
+  --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#8a8a80;
+  --live:#3987e5; --sold:#d95926; --accent:#3987e5;
+  --s100:#cde2fb;--s200:#9ec5f4;--s300:#6da7ec;--s400:#3987e5;--s500:#256abf;--s600:#184f95;--s700:#0d366b;
+  --good:#199e70; --warn:#c98500; --crit:#e66767;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:14px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial;
+  background:var(--surface-0);color:var(--text-primary);overflow:hidden}
+#app{display:flex;height:100vh}
+#side{width:320px;flex:0 0 320px;background:var(--surface-1);border-right:1px solid var(--line);
+  display:flex;flex-direction:column;overflow:hidden}
+#brand{padding:16px 18px 12px;border-bottom:1px solid var(--line)}
+#brand h1{margin:0;font-size:15px;letter-spacing:-.01em;font-weight:650}
+#brand p{margin:3px 0 0;font-size:12px;color:var(--text-muted)}
+#scroll{overflow-y:auto;padding:14px 18px 20px;flex:1}
+.sec{margin-bottom:18px}
+.sec h2{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);
+  margin:0 0 8px;font-weight:600}
+label.row{display:flex;align-items:center;gap:9px;padding:5px 0;cursor:pointer;font-size:13px;
+  color:var(--text-secondary)}
+label.row:hover{color:var(--text-primary)}
+input[type=checkbox]{accent-color:var(--accent);width:15px;height:15px;cursor:pointer;flex:0 0 auto}
+select,input[type=text],input[type=number]{width:100%;background:var(--surface-2);color:var(--text-primary);
+  border:1px solid var(--line);border-radius:7px;padding:7px 9px;font:inherit;font-size:13px}
+select:focus,input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.pair{display:flex;gap:8px}
+.pair>*{min-width:0}
+.cov{float:right;font-weight:500;letter-spacing:0;text-transform:none;color:var(--text-muted);font-size:10.5px}
+.hint{font-size:11px;color:var(--text-muted);margin-top:7px;line-height:1.4}
+.swatch{width:11px;height:11px;border-radius:50%;flex:0 0 auto;box-shadow:0 0 0 2px var(--surface-1)}
+#stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.tile{background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:9px 10px}
+.tile .k{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted)}
+.tile .v{font-size:17px;font-weight:650;letter-spacing:-.02em;margin-top:2px;
+  font-variant-numeric:tabular-nums}
+#mapwrap{flex:1;position:relative;min-width:0}
+#map{position:absolute;inset:0;background:#0f0f0e}
+#topbar{position:absolute;top:12px;right:12px;z-index:1000;display:flex;gap:8px}
+.btn{background:var(--surface-1);color:var(--text-primary);border:1px solid var(--line);
+  border-radius:8px;padding:8px 13px;font:inherit;font-size:13px;font-weight:550;cursor:pointer;
+  box-shadow:0 2px 10px rgba(0,0,0,.4)}
+.btn:hover{background:var(--surface-2)}
+.btn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+#legend{position:absolute;left:12px;bottom:22px;z-index:1000;background:var(--surface-1);
+  border:1px solid var(--line);border-radius:10px;padding:11px 13px;font-size:12px;
+  box-shadow:0 2px 14px rgba(0,0,0,.45);max-width:230px}
+#legend .lt{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);
+  margin-bottom:7px;font-weight:600}
+#legend .li{display:flex;align-items:center;gap:8px;padding:2px 0;color:var(--text-secondary)}
+.ramp{display:flex;height:9px;border-radius:5px;overflow:hidden;margin:4px 0 4px}
+.ramp i{flex:1}
+.rampx{display:flex;justify-content:space-between;color:var(--text-muted);font-size:11px;
+  font-variant-numeric:tabular-nums}
+.chip{background:rgba(20,20,19,.86);border:1px solid var(--line);border-radius:5px;
+  padding:1px 5px;font-size:11px;font-weight:600;color:#fff;white-space:nowrap;
+  font-variant-numeric:tabular-nums;box-shadow:0 1px 4px rgba(0,0,0,.5)}
+.leaflet-tooltip.lbl{background:transparent;border:0;box-shadow:none;padding:0;margin:0}
+.leaflet-tooltip.lbl:before{display:none}
+.leaflet-popup-content-wrapper{background:var(--surface-1);color:var(--text-primary);
+  border:1px solid var(--line);border-radius:11px;box-shadow:0 6px 26px rgba(0,0,0,.55)}
+.leaflet-popup-tip{background:var(--surface-1);border:1px solid var(--line)}
+.leaflet-popup-content{margin:13px 15px;width:280px!important}
+.leaflet-popup-close-button{color:var(--text-muted)!important}
+.pop .badge{display:inline-block;font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+  font-weight:650;padding:2px 7px;border-radius:4px;margin-bottom:7px}
+.pop h3{margin:0 0 2px;font-size:15px;line-height:1.25;letter-spacing:-.01em}
+.pop .sub{color:var(--text-muted);font-size:12px;margin-bottom:10px}
+.pop .price{font-size:22px;font-weight:680;letter-spacing:-.025em;margin:0 0 2px;
+  font-variant-numeric:tabular-nums}
+.pop .ppu{color:var(--text-secondary);font-size:12px;margin-bottom:11px;font-variant-numeric:tabular-nums}
+.pop dl{display:grid;grid-template-columns:auto 1fr;gap:5px 12px;margin:0 0 12px;font-size:12.5px}
+.pop dt{color:var(--text-muted)}
+.pop dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+.pop .links{display:flex;gap:6px;flex-wrap:wrap}
+.pop .links a{flex:1;text-align:center;min-width:74px;background:var(--surface-2);
+  border:1px solid var(--line);border-radius:7px;padding:6px 4px;font-size:12px;font-weight:550;
+  color:var(--text-primary);text-decoration:none}
+.pop .links a:hover{background:var(--accent);border-color:var(--accent);color:#fff}
+.pop .internal{border-top:1px solid var(--line);margin-top:11px;padding-top:9px;font-size:11.5px;
+  color:var(--text-muted)}
+.pop .internal b{color:var(--text-secondary);font-weight:600}
+body.present #side{display:none}
+body.present .internal{display:none}
+body.present .leaflet-popup-content{width:320px!important}
+body.present .pop h3{font-size:18px}
+body.present .pop .price{font-size:26px}
+body.present .pop dl{font-size:14px}
+#count{position:absolute;left:12px;top:12px;z-index:1000;background:var(--surface-1);
+  border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:12.5px;
+  color:var(--text-secondary);box-shadow:0 2px 10px rgba(0,0,0,.4);font-variant-numeric:tabular-nums}
+#count b{color:var(--text-primary);font-weight:650}
+.leaflet-container{background:#0f0f0e}
+.leaflet-bar a{background:var(--surface-1);color:var(--text-primary);border-color:var(--line)}
+.leaflet-bar a:hover{background:var(--surface-2)}
+
+#gate{position:fixed;inset:0;z-index:4000;background:var(--surface-0);display:flex;
+  align-items:center;justify-content:center;padding:24px}
+#gate form{width:100%;max-width:360px;text-align:center}
+#gate h1{font-size:26px;letter-spacing:-.02em;margin:0 0 10px;font-weight:680}
+#gate p{color:var(--text-muted);font-size:13.5px;line-height:1.6;margin:0 0 26px}
+#gate input{width:100%;background:var(--surface-2);border:1px solid var(--line);border-radius:9px;
+  padding:12px 14px;font:inherit;font-size:15px;color:var(--text-primary);text-align:center;
+  letter-spacing:.02em;margin-bottom:10px}
+#gate input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+#gate button{width:100%;background:var(--accent);color:#fff;border:0;border-radius:9px;
+  padding:12px;font:inherit;font-size:15px;font-weight:600;cursor:pointer}
+#gate button:hover{filter:brightness(1.08)}
+#gate button:disabled{opacity:.55;cursor:default}
+#gateMsg{margin-top:14px;font-size:13px;min-height:19px;color:var(--crit)}
+#gateMsg.busy{color:var(--text-muted)}
+body.locked #app{display:none}
+.dim{filter:grayscale(.35) brightness(.72) contrast(1.05)}
+</style></head>
+<body data-palette="#3987e5,#d95926" class="locked">
+
+<div id="gate">
+  <form id="gateForm" autocomplete="off">
+    <img src="logo.svg" alt="" width="58" height="58" style="margin-bottom:14px">
+    <h1>AptOffer</h1>
+    <p>Live multifamily and commercial listings across Los Angeles County.<br>Enter the access password to continue.</p>
+    <input type="password" id="pw" placeholder="Password" autocomplete="current-password" autofocus>
+    <button type="submit" id="go">View the map</button>
+    <div id="gateMsg"></div>
+  </form>
+</div>
+<div id="app">
+<aside id="side">
+  <div id="brand">
+    <h1>AptOffer</h1>
+    <p>Updated August 19, 2026</p>
+  </div>
+  <div id="scroll">
+    <div id="stats"></div>
+
+    <div class="sec">
+      <h2>Show on map</h2>
+      <label class="row"><input type="checkbox" id="fLive" checked>
+        <span class="swatch" style="background:var(--live)"></span> Active listings</label>
+      <label class="row"><input type="checkbox" id="fSold">
+        <span class="swatch" style="background:var(--sold)"></span> Sold comps</label>
+    </div>
+
+    <div class="sec">
+      <h2>Pin labels</h2>
+      <label class="row"><input type="checkbox" id="lUnits" checked> Units</label>
+      <label class="row"><input type="checkbox" id="lPrice"> Price</label>
+      <label class="row"><input type="checkbox" id="lPpu"> Price per unit</label>
+      <label class="row"><input type="checkbox" id="lPpsf"> Price per SF</label>
+      <label class="row"><input type="checkbox" id="lCap"> Cap rate</label>
+      <label class="row"><input type="checkbox" id="lDom"> Days on market</label>
+      <p class="hint">Labels appear once you zoom in past neighbourhood level. Everything shows in the popup regardless.</p>
+    </div>
+
+    <div class="sec">
+      <h2>Colour pins by</h2>
+      <select id="colorBy">
+        <option value="none">Listing vs. sold</option>
+        <option value="d">Days on market</option>
+        <option value="p">Price</option>
+        <option value="ppu">Price per unit</option>
+        <option value="ppsf">Price per SF</option>
+        <option value="cr">Cap rate</option>
+        <option value="u">Unit count</option>
+      </select>
+    </div>
+
+    <div class="sec">
+      <h2>Filter</h2>
+      <input type="text" id="q" placeholder="Search address or city…" style="margin-bottom:8px">
+      <select id="fType" style="margin-bottom:8px"><option value="">All property types</option></select>
+      <select id="fStatus" style="margin-bottom:8px"><option value="">All statuses</option></select>
+      <div class="pair" style="margin-bottom:8px">
+        <input type="number" id="pMin" placeholder="Min $">
+        <input type="number" id="pMax" placeholder="Max $">
+      </div>
+      <div class="pair" style="margin-bottom:14px">
+        <input type="number" id="uMin" placeholder="Min units">
+        <input type="number" id="dMax" placeholder="Max days">
+      </div>
+
+      <h2>Cap rate <span class="cov" id="covCap"></span></h2>
+      <div class="pair" style="margin-bottom:14px">
+        <input type="number" id="crMin" placeholder="Min %" step="0.25">
+        <input type="number" id="crMax" placeholder="Max %" step="0.25">
+      </div>
+
+      <h2>Price per unit <span class="cov" id="covPpu"></span></h2>
+      <div class="pair" style="margin-bottom:14px">
+        <input type="number" id="ppuMin" placeholder="Min $/unit" step="10000">
+        <input type="number" id="ppuMax" placeholder="Max $/unit" step="10000">
+      </div>
+
+      <h2>Price per SF <span class="cov" id="covPpsf"></span></h2>
+      <div class="pair" style="margin-bottom:6px">
+        <input type="number" id="psfMin" placeholder="Min $/SF" step="25">
+        <input type="number" id="psfMax" placeholder="Max $/SF" step="25">
+      </div>
+      <p class="hint" style="margin-bottom:14px">MARKET_TRACKER records square footage on very few rows &mdash; almost everything is logged as a unit count. Using this filter will hide most listings.</p>
+
+      <label class="row" style="margin-bottom:10px"><input type="checkbox" id="keepBlank">
+        Keep listings with no value recorded</label>
+
+      <button class="btn" id="reset" style="width:100%">Reset filters</button>
+    </div>
+  </div>
+</aside>
+
+<div id="mapwrap">
+  <div id="map"></div>
+  <div id="count"></div>
+  <div id="topbar">
+    <button class="btn" id="fit">Fit to results</button>
+  </div>
+  <div id="legend"></div>
+</div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="data.enc.js"></script>
+<script>
+let DATA = null;
+let L_=[], C_=[];
+function boot(){
+L_ = DATA.L; C_ = DATA.C;
+const RAMP = ['#cde2fb','#9ec5f4','#6da7ec','#3987e5','#256abf','#184f95','#0d366b'];
+const LIVE = '#3987e5', SOLD = '#d95926';
+
+const $ = id => document.getElementById(id);
+const fmtM = v => v==null ? '—' : (v>=1e6 ? '$'+(v/1e6).toFixed(v>=1e7?1:2)+'M' : '$'+Math.round(v/1e3)+'K');
+const fmtFull = v => v==null ? '—' : '$'+Math.round(v).toLocaleString('en-US');
+const fmtK = v => v==null ? '—' : '$'+Math.round(v/1e3)+'K';
+
+// ---- populate filter selects ----
+const uniq = (arr,f) => [...new Set(arr.map(f).filter(Boolean))].sort();
+uniq(L_, r=>r.t).forEach(v=>$('fType').add(new Option(v,v)));
+uniq(L_, r=>r.st).forEach(v=>$('fStatus').add(new Option(v,v)));
+
+// ---- map ----
+const map = L.map('map',{zoomControl:true,preferCanvas:true}).setView([33.98,-118.30],11);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+  maxZoom:19, attribution:'&copy; OpenStreetMap contributors &copy; CARTO'
+}).addTo(map);
+const layer = L.layerGroup().addTo(map);
+
+// ---- state ----
+const S = {live:true, sold:false, colorBy:'none', labels:{u:true,p:false,ppu:false,ppsf:false,cr:false,d:false}};
+
+function metric(r,k){
+  if(k==='d') return r.d;
+  if(k==='p') return r.p;
+  if(k==='ppu') return r.ppu;
+  if(k==='ppsf') return r.ppsf;
+  if(k==='cr') return r.cr;
+  if(k==='u') return r.u;
+  return null;
+}
+// quantile breaks so colour spreads evenly instead of bunching on outliers
+function breaks(vals){
+  const v = vals.filter(x=>x!=null && !isNaN(x)).sort((a,b)=>a-b);
+  if(v.length<7) return null;
+  const q = [];
+  for(let i=1;i<7;i++) q.push(v[Math.floor(v.length*i/7)]);
+  return q;
+}
+function rampColor(x,q){
+  if(x==null||q==null) return '#5a5a55';
+  let i=0; while(i<q.length && x>=q[i]) i++;
+  return RAMP[i];
+}
+
+function passes(r){
+  const q=$('q').value.trim().toLowerCase();
+  if(q && !((r.a+' '+r.c+' '+r.z).toLowerCase().includes(q))) return false;
+  if(r._k==='L'){
+    if($('fType').value && r.t!==$('fType').value) return false;
+    if($('fStatus').value && r.st!==$('fStatus').value) return false;
+    const dM=$('dMax').value;
+    if(dM!==''){ if(r.d==null){ if(!$('keepBlank').checked) return false; } else if(r.d>+dM) return false; }
+  }
+  // numeric ranges. A row missing the value is dropped unless "keep blanks" is on.
+  const keep = $('keepBlank').checked;
+  const RANGE = [['pMin','pMax','p'],['crMin','crMax','cr'],
+                 ['ppuMin','ppuMax','ppu'],['psfMin','psfMax','ppsf']];
+  for(const [lo,hi,f] of RANGE){
+    const a=$(lo).value, b=$(hi).value;
+    if(a==='' && b==='') continue;
+    const v=r[f];
+    if(v==null || isNaN(v)){ if(keep) continue; return false; }
+    if(a!=='' && v<+a) return false;
+    if(b!=='' && v>+b) return false;
+  }
+  const um=$('uMin').value;
+  if(um!==''){ if(r.u==null){ if(!keep) return false; } else if(r.u<+um) return false; }
+  return true;
+}
+
+function labelFor(r){
+  const L=S.labels, out=[];
+  if(L.u && r.u) out.push(r.u+'u');
+  if(L.p && r.p) out.push(fmtM(r.p));
+  if(L.ppu && r.ppu) out.push(fmtK(r.ppu)+'/u');
+  if(L.ppsf && r.ppsf) out.push('$'+r.ppsf+'/sf');
+  if(L.cr && r.cr) out.push(r.cr.toFixed(2)+'%');
+  if(L.d && r.d!=null) out.push(r.d+'d');
+  return out.join(' · ');
+}
+
+function searchLinks(r){
+  const q = encodeURIComponent(r.a+', '+r.c+', CA '+(r.z||''));
+  return `<div class="links">
+    <a href="https://www.loopnet.com/search/commercial-real-estate/${q}/for-sale/" target="_blank" rel="noopener">LoopNet</a>
+    <a href="https://www.zillow.com/homes/${q}_rb/" target="_blank" rel="noopener">Zillow</a>
+    <a href="https://www.google.com/maps/search/?api=1&query=${q}" target="_blank" rel="noopener">Map</a>
+  </div>`;
+}
+
+function popupLive(r){
+  const rows=[];
+  if(r.ur) rows.push(['Size', r.ur]);
+  if(r.cr) rows.push(['Cap rate', r.cr.toFixed(2)+'%']);
+  if(r.d!=null) rows.push(['Days on market', r.d]);
+  if(r.ld) rows.push(['Listed', r.ld]);
+  if(r.t) rows.push(['Type', r.t]);
+  return `<div class="pop">
+    <span class="badge" style="background:rgba(57,135,229,.18);color:#7fb3f0">${r.st||'Active'}</span>
+    <h3>${r.a}</h3>
+    <div class="sub">${r.c}${r.z?', '+r.z:''}</div>
+    <div class="price">${r.p?fmtFull(r.p):'Price undisclosed'}</div>
+    <div class="ppu">${r.ppu?fmtFull(r.ppu)+' per unit':(r.ppsf?fmtFull(r.ppsf)+' per SF':'&nbsp;')}</div>
+    <dl>${rows.map(x=>`<dt>${x[0]}</dt><dd>${x[1]}</dd>`).join('')}</dl>
+    ${searchLinks(r)}
+  </div>`;
+}
+function popupSold(r){
+  const rows=[];
+  if(r.u) rows.push(['Units', r.u]);
+  if(r.ppu) rows.push(['Per unit', fmtFull(r.ppu)]);
+  if(r.cr) rows.push(['Cap rate', r.cr.toFixed(2)+'%']);
+  if(r.b) rows.push(['Year built', r.b]);
+  if(r.sd) rows.push(['Sold', r.sd]);
+  return `<div class="pop">
+    <span class="badge" style="background:rgba(217,89,38,.2);color:#f0916b">Sold comp</span>
+    <h3>${r.a}</h3>
+    <div class="sub">${r.c}${r.z?', '+r.z:''}</div>
+    <div class="price">${r.p?fmtFull(r.p):'—'}</div>
+    <div class="ppu">${r.ppu?fmtFull(r.ppu)+' per unit':'&nbsp;'}</div>
+    <dl>${rows.map(x=>`<dt>${x[0]}</dt><dd>${x[1]}</dd>`).join('')}</dl>
+    ${searchLinks(r)}
+  </div>`;
+}
+
+let shownLive=[], shownSold=[];
+function draw(){
+  layer.clearLayers();
+  const zoom = map.getZoom(), showLabels = zoom>=14;
+  shownLive = S.live ? L_.filter(r=>{r._k='L';return passes(r)}) : [];
+  shownSold = S.sold ? C_.filter(r=>{r._k='C';return passes(r)}) : [];
+
+  const cb = S.colorBy;
+  let q=null;
+  if(cb!=='none') q = breaks([...shownLive,...shownSold].map(r=>metric(r,cb)));
+
+  const add = (r,isLive)=>{
+    const base = isLive?LIVE:SOLD;
+    const col = cb==='none' ? base : rampColor(metric(r,cb), q);
+    const m = L.circleMarker([r.y,r.x],{
+      radius: isLive?6:5, color:'#141413', weight:1.5, opacity:1,
+      fillColor:col, fillOpacity: isLive?.95:.85
+    });
+    m.bindPopup(isLive?popupLive(r):popupSold(r),{maxWidth:340});
+    const lab = labelFor(r);
+    if(showLabels && lab) m.bindTooltip(`<span class="chip">${lab}</span>`,
+      {permanent:true,direction:'right',offset:[7,0],className:'lbl'});
+    layer.addLayer(m);
+  };
+  shownSold.forEach(r=>add(r,false));
+  shownLive.forEach(r=>add(r,true));
+
+  renderStats(); renderLegend(q); renderCount(showLabels);
+}
+
+function med(a){ const v=a.filter(x=>x!=null&&!isNaN(x)).sort((x,y)=>x-y);
+  return v.length? v[Math.floor(v.length/2)] : null; }
+
+function renderStats(){
+  const A = shownLive;
+  const tiles = [
+    ['On market', A.length],
+    ['Median ask', fmtM(med(A.map(r=>r.p)))],
+    ['Median $/unit', (()=>{const m=med(A.map(r=>r.ppu));return m?fmtK(m):'—'})()],
+    ['Median days', (()=>{const m=med(A.map(r=>r.d));return m==null?'—':m})()],
+    ['Median cap', (()=>{const m=med(A.map(r=>r.cr));return m==null?'—':m.toFixed(2)+'%'})()],
+    ['Sold comps', shownSold.length]
+  ];
+  $('stats').innerHTML = tiles.map(t=>`<div class="tile"><div class="k">${t[0]}</div><div class="v">${t[1]}</div></div>`).join('');
+}
+
+function renderCount(showLabels){
+  $('count').innerHTML = `<b>${shownLive.length}</b> on market`
+    + (S.sold?` &nbsp;·&nbsp; <b>${shownSold.length}</b> sold` : '')
+    + (showLabels?'':' &nbsp;·&nbsp; zoom in for labels');
+}
+
+const CB_NAME={d:'Days on market',p:'Asking price',ppu:'Price per unit',ppsf:'Price per SF',cr:'Cap rate',u:'Unit count'};
+function renderLegend(q){
+  if(S.colorBy==='none'){
+    $('legend').innerHTML = `<div class="lt">Legend</div>
+      <div class="li"><span class="swatch" style="background:${LIVE}"></span> On market (${shownLive.length})</div>
+      ${S.sold?`<div class="li"><span class="swatch" style="background:${SOLD}"></span> Sold comp (${shownSold.length})</div>`:''}`;
+    return;
+  }
+  const f = S.colorBy==='ppsf' ? (v=>v==null?'—':'$'+Math.round(v)+'/sf')
+          : S.colorBy==='cr' ? (v=>v==null?'—':v.toFixed(1)+'%')
+          : S.colorBy==='d'  ? (v=>v==null?'—':v+'d')
+          : S.colorBy==='u'  ? (v=>v==null?'—':v+'u')
+          : (v=>v==null?'—':fmtM(v));
+  $('legend').innerHTML = `<div class="lt">${CB_NAME[S.colorBy]}</div>
+    <div class="ramp">${RAMP.map(c=>`<i style="background:${c}"></i>`).join('')}</div>
+    <div class="rampx"><span>low</span><span>${q?f(q[2]):''}</span><span>high</span></div>
+    <div class="li" style="margin-top:7px;font-size:11px">Grey pins have no value recorded.</div>`;
+}
+
+// ---- wiring ----
+['q','fType','fStatus','pMin','pMax','uMin','dMax','crMin','crMax','ppuMin','ppuMax','psfMin','psfMax','keepBlank'].forEach(id=>{
+  $(id).addEventListener('input',draw); $(id).addEventListener('change',draw);
+});
+$('fLive').onchange = e=>{S.live=e.target.checked;draw()};
+$('fSold').onchange = e=>{S.sold=e.target.checked;draw()};
+$('colorBy').onchange = e=>{S.colorBy=e.target.value;draw()};
+const LK={lUnits:'u',lPrice:'p',lPpu:'ppu',lPpsf:'ppsf',lCap:'cr',lDom:'d'};
+Object.keys(LK).forEach(id=>{$(id).onchange=e=>{S.labels[LK[id]]=e.target.checked;draw()}});
+$('reset').onclick = ()=>{
+  ['q','pMin','pMax','uMin','dMax','crMin','crMax','ppuMin','ppuMax','psfMin','psfMax'].forEach(i=>$(i).value='');
+  $('keepBlank').checked=false;
+  ['fType','fStatus'].forEach(i=>$(i).value='');
+  draw();
+};
+$('fit').onclick = ()=>{
+  const pts=[...shownLive,...shownSold].map(r=>[r.y,r.x]);
+  if(pts.length) map.fitBounds(L.latLngBounds(pts).pad(.05));
+};
+let zt=null;
+map.on('zoomend',()=>{clearTimeout(zt);zt=setTimeout(draw,60)});
+
+// how many rows actually carry each metric — so an empty map is never a mystery
+(function coverage(){
+  const n=(f)=>L_.filter(r=>r[f]!=null&&!isNaN(r[f])).length;
+  $('covCap').textContent  = n('cr')+' of '+L_.length+' listings';
+  $('covPpu').textContent  = n('ppu')+' of '+L_.length+' listings';
+  $('covPpsf').textContent = n('ppsf')+' of '+L_.length+' listings';
+})();
+
+draw();
+$('fit').click();
+}
+
+
+/* ---------- password gate ----------
+   The listing data is AES-256-GCM ciphertext until the right password is typed.
+   Nothing readable is in this file. A wrong password fails the GCM auth tag. */
+const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const gm  = document.getElementById('gateMsg');
+let booted = false;
+
+async function unlock(pw){
+  const E = window.__ENC;
+  if(!E) throw new Error('data file missing');
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveKey']);
+  const key  = await crypto.subtle.deriveKey(
+    {name:'PBKDF2', salt:b64(E.salt), iterations:E.iter, hash:'SHA-256'},
+    base, {name:'AES-GCM', length:256}, false, ['decrypt']);
+  const buf  = await crypto.subtle.decrypt({name:'AES-GCM', iv:b64(E.iv)}, key, b64(E.ct));
+  return JSON.parse(new TextDecoder().decode(buf));
+}
+
+async function attempt(pw, remember){
+  gm.className = 'busy'; gm.textContent = 'Unlocking…';
+  document.getElementById('go').disabled = true;
+  try{
+    DATA = await unlock(pw);
+  }catch(err){
+    gm.className = ''; gm.textContent = 'Incorrect password.';
+    document.getElementById('go').disabled = false;
+    document.getElementById('pw').select();
+    if(remember) sessionStorage.removeItem('k');
+    return false;
+  }
+  if(remember){ try{ sessionStorage.setItem('k', pw); }catch(e){} }
+  document.getElementById('gate').remove();
+  document.body.classList.remove('locked');
+  if(!booted){ booted = true; boot(); }
+  return true;
+}
+
+document.getElementById('gateForm').addEventListener('submit', e=>{
+  e.preventDefault();
+  const pw = document.getElementById('pw').value;
+  if(pw) attempt(pw, true);
+});
+
+// a refresh mid-meeting shouldn't ask again
+(function(){
+  let saved = null; try{ saved = sessionStorage.getItem('k'); }catch(e){}
+  if(saved) attempt(saved, false);
+})();
+
+</script></body></html>
