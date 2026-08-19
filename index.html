@@ -130,15 +130,14 @@ body.present .pop dl{font-size:14px}
   padding:12px 14px;font:inherit;font-size:15px;color:var(--text-primary);text-align:center;
   letter-spacing:.02em;margin-bottom:10px}
 #gate input:focus{outline:2px solid var(--accent);outline-offset:-1px}
-
-#eye{width:auto;background:transparent;border:0;color:var(--text-muted);font:inherit;font-size:12.5px;
-  font-weight:500;cursor:pointer;padding:8px 10px;margin:2px auto 4px;display:block;
-  text-decoration:underline;text-underline-offset:3px}
-#eye:hover{color:var(--text-primary);background:transparent}
 #gate button{width:100%;background:var(--accent);color:#fff;border:0;border-radius:9px;
   padding:12px;font:inherit;font-size:15px;font-weight:600;cursor:pointer}
 #gate button:hover{filter:brightness(1.08)}
 #gate button:disabled{opacity:.55;cursor:default}
+#gate button#eye{width:auto;background:transparent;border:0;color:var(--text-muted);font:inherit;
+  font-size:12.5px;font-weight:500;cursor:pointer;padding:7px 10px;margin:2px auto 6px;display:block;
+  text-decoration:underline;text-underline-offset:3px;filter:none}
+#gate button#eye:hover{color:var(--text-primary);background:transparent;filter:none}
 #gateMsg{margin-top:14px;font-size:13px;min-height:19px;color:var(--crit)}
 #gateMsg.busy{color:var(--text-muted)}
 body.locked #app{display:none}
