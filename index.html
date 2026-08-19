@@ -248,7 +248,6 @@ body.locked #app{display:none}
 </div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="data.enc.js"></script>
 <script>
 let DATA = null;
 let L_=[], C_=[];
@@ -494,8 +493,19 @@ const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 const gm  = document.getElementById('gateMsg');
 let booted = false;
 
+// Always pull the newest data file. A stale cached copy is encrypted with the
+// OLD password, which looks exactly like "your password stopped working".
+async function loadEnc(){
+  if(window.__ENC) return window.__ENC;
+  const r = await fetch('data.enc.js?t=' + Date.now(), {cache:'no-store'});
+  if(!r.ok) throw new Error('could not load listing data (' + r.status + ')');
+  const txt = await r.text();
+  window.__ENC = JSON.parse(txt.replace(/^\s*window\.__ENC\s*=\s*/, '').replace(/;\s*$/, ''));
+  return window.__ENC;
+}
+
 async function unlock(pw){
-  const E = window.__ENC;
+  const E = await loadEnc();
   if(!E) throw new Error('data file missing');
   const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveKey']);
   const key  = await crypto.subtle.deriveKey(
@@ -511,7 +521,10 @@ async function attempt(pw, remember){
   try{
     DATA = await unlock(pw);
   }catch(err){
-    gm.className = ''; gm.textContent = 'Incorrect password.';
+    gm.className = '';
+    gm.textContent = /load listing data/.test(err.message)
+      ? 'Could not load the listing data. Refresh and try again.'
+      : 'Incorrect password.';
     document.getElementById('go').disabled = false;
     document.getElementById('pw').select();
     if(remember) sessionStorage.removeItem('k');
