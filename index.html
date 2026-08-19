@@ -130,6 +130,11 @@ body.present .pop dl{font-size:14px}
   padding:12px 14px;font:inherit;font-size:15px;color:var(--text-primary);text-align:center;
   letter-spacing:.02em;margin-bottom:10px}
 #gate input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+
+#eye{width:auto;background:transparent;border:0;color:var(--text-muted);font:inherit;font-size:12.5px;
+  font-weight:500;cursor:pointer;padding:8px 10px;margin:2px auto 4px;display:block;
+  text-decoration:underline;text-underline-offset:3px}
+#eye:hover{color:var(--text-primary);background:transparent}
 #gate button{width:100%;background:var(--accent);color:#fff;border:0;border-radius:9px;
   padding:12px;font:inherit;font-size:15px;font-weight:600;cursor:pointer}
 #gate button:hover{filter:brightness(1.08)}
@@ -147,6 +152,7 @@ body.locked #app{display:none}
     <h1>AptOffer</h1>
     <p>Live multifamily and commercial listings across Los Angeles County.<br>Enter the access password to continue.</p>
     <input type="password" id="pw" placeholder="Password" autocomplete="current-password" autofocus>
+    <button type="button" id="eye">Show password</button>
     <button type="submit" id="go">View the map</button>
     <div id="gateMsg"></div>
   </form>
@@ -519,6 +525,14 @@ async function attempt(pw, remember){
   return true;
 }
 
+
+document.getElementById('eye').addEventListener('click',()=>{
+  const f=document.getElementById('pw'), e=document.getElementById('eye');
+  const show = f.type==='password';
+  f.type = show?'text':'password';
+  e.textContent = show?'Hide password':'Show password';
+  f.focus();
+});
 document.getElementById('gateForm').addEventListener('submit', e=>{
   e.preventDefault();
   const pw = document.getElementById('pw').value;
