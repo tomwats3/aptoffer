@@ -547,14 +547,15 @@ document.getElementById('eye').addEventListener('click',()=>{
 });
 document.getElementById('gateForm').addEventListener('submit', e=>{
   e.preventDefault();
-  const pw = document.getElementById('pw').value;
+  // trim: a trailing space from copy/paste should not read as a wrong password
+  const pw = document.getElementById('pw').value.trim();
   if(pw) attempt(pw, true);
 });
 
 // a refresh mid-meeting shouldn't ask again
 (function(){
   let saved = null; try{ saved = sessionStorage.getItem('k'); }catch(e){}
-  if(saved) attempt(saved, false);
+  if(saved) attempt(saved.trim(), false);
 })();
 
 </script></body></html>
