@@ -241,6 +241,25 @@ body.locked #app{display:none}
     </div>
 
     <div class="sec">
+      <h2>Search near an address</h2>
+      <input type="text" id="near" placeholder="e.g. 5011 Pico Blvd, Los Angeles" style="margin-bottom:8px" autocomplete="off">
+      <div class="pair" style="margin-bottom:8px">
+        <select id="radius">
+          <option value="0.5">0.5 miles</option>
+          <option value="1">1 mile</option>
+          <option value="2" selected>2 miles</option>
+          <option value="3">3 miles</option>
+          <option value="5">5 miles</option>
+          <option value="10">10 miles</option>
+        </select>
+        <button class="btn" id="goNear" style="white-space:nowrap">Search</button>
+      </div>
+      <div class="pair" style="margin-bottom:6px">
+        <button class="btn" id="pickMap" style="flex:1">Pick on map</button>
+        <button class="btn" id="clearNear" style="flex:1">Clear</button>
+      </div>
+      <p class="hint" id="nearMsg" style="margin-bottom:16px"></p>
+
       <h2>Filter</h2>
       <input type="text" id="q" placeholder="Search address or city…" style="margin-bottom:8px">
       <select id="fType" style="margin-bottom:8px"><option value="">All property types</option></select>
@@ -352,6 +371,10 @@ function passes(r){
     if($('fStatus').value && r.st!==$('fStatus').value) return false;
     const dM=$('dMax').value;
     if(dM!==''){ if(r.d==null){ if(!$('keepBlank').checked) return false; } else if(r.d>+dM) return false; }
+  }
+  if(CENTER){
+    const R = +document.getElementById('radius').value;
+    if(milesBetween(CENTER.lat, CENTER.lng, r.y, r.x) > R) return false;
   }
   // numeric ranges. A row missing the value is dropped unless "keep blanks" is on.
   const keep = $('keepBlank').checked;
@@ -470,7 +493,8 @@ function renderStats(){
 }
 
 function renderCount(showLabels){
-  $('count').innerHTML = `<b>${shownLive.length}</b> on market`
+  $('count').innerHTML = (CENTER ? `within <b>${document.getElementById('radius').value}</b> mi &nbsp;·&nbsp; ` : '')
+    + `<b>${shownLive.length}</b> on market`
     + (S.sold?` &nbsp;·&nbsp; <b>${shownSold.length}</b> sold` : '')
     + (showLabels?'':' &nbsp;·&nbsp; zoom in for labels');
 }
@@ -506,6 +530,7 @@ Object.keys(LK).forEach(id=>{$(id).onchange=e=>{S.labels[LK[id]]=e.target.checke
 $('reset').onclick = ()=>{
   ['q','pMin','pMax','uMin','dMax','crMin','crMax','ppuMin','ppuMax','psfMin','psfMax'].forEach(i=>$(i).value='');
   $('keepBlank').checked=false;
+  if(CENTER) clearNear();
   ['fType','fStatus'].forEach(i=>$(i).value='');
   draw();
 };
@@ -528,6 +553,104 @@ $('fit').onclick = ()=>{
   // tapping a pin should reveal the map, not the filter panel
   map.on('click popupopen', close);
 })();
+
+/* ============ radius search ============
+   Every pin already carries real coordinates, so "within N miles" is just
+   arithmetic. The only outside help needed is turning a typed address into
+   a lat/long, which uses the free US Census geocoder (no key, no account).
+   If that ever fails, "Pick on map" sets the centre with a click instead. */
+let CENTER = null, CIRCLE = null, CENTERPIN = null, PICKING = false;
+
+function milesBetween(aLat, aLng, bLat, bLng){
+  const R = 3958.7613, rad = Math.PI/180;
+  const dLat = (bLat-aLat)*rad, dLng = (bLng-aLng)*rad;
+  const h = Math.sin(dLat/2)**2 +
+            Math.cos(aLat*rad)*Math.cos(bLat*rad)*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h));
+}
+
+function geocodeAddress(addr){
+  // JSONP - the Census endpoint allows it, so this works from any site.
+  return new Promise((resolve, reject)=>{
+    const cb = '__geo' + Date.now();
+    const tag = document.createElement('script');
+    const timer = setTimeout(()=>{ cleanup(); reject(new Error('timeout')); }, 12000);
+    function cleanup(){ clearTimeout(timer); delete window[cb]; if(tag.parentNode) tag.remove(); }
+    window[cb] = data => {
+      cleanup();
+      const m = data && data.result && data.result.addressMatches;
+      if(m && m.length) resolve({lat:+m[0].coordinates.y, lng:+m[0].coordinates.x, label:m[0].matchedAddress});
+      else reject(new Error('no match'));
+    };
+    tag.onerror = ()=>{ cleanup(); reject(new Error('network')); };
+    tag.src = 'https://geocoding.geo.census.gov/geocoder/locations/onelineaddress'
+            + '?address=' + encodeURIComponent(addr)
+            + '&benchmark=Public_AR_Current&vintage=Current_Current&format=jsonp&callback=' + cb;
+    document.body.appendChild(tag);
+  });
+}
+
+function setCenter(lat, lng, label){
+  CENTER = {lat, lng, label};
+  drawRing();
+  draw();
+  const r = +document.getElementById('radius').value;
+  map.fitBounds(CIRCLE.getBounds().pad(0.08));
+  document.getElementById('nearMsg').innerHTML =
+    '<b style="color:var(--text-primary)">' + shownLive.length + '</b> on market within ' + r +
+    ' mi' + (S.sold ? ' &middot; <b style="color:var(--text-primary)">' + shownSold.length + '</b> sold' : '') +
+    '<br>' + (label || (lat.toFixed(4) + ', ' + lng.toFixed(4)));
+}
+
+function drawRing(){
+  if(CIRCLE){ map.removeLayer(CIRCLE); CIRCLE = null; }
+  if(CENTERPIN){ map.removeLayer(CENTERPIN); CENTERPIN = null; }
+  if(!CENTER) return;
+  const meters = +document.getElementById('radius').value * 1609.344;
+  CIRCLE = L.circle([CENTER.lat, CENTER.lng], {radius:meters, color:'#eda100', weight:2,
+    opacity:.9, fillColor:'#eda100', fillOpacity:.06, interactive:false}).addTo(map);
+  CENTERPIN = L.circleMarker([CENTER.lat, CENTER.lng], {radius:7, color:'#141413', weight:2,
+    fillColor:'#eda100', fillOpacity:1, interactive:false}).addTo(map);
+}
+
+function clearNear(){
+  CENTER = null; drawRing(); draw();
+  document.getElementById('near').value = '';
+  document.getElementById('nearMsg').textContent = '';
+}
+
+async function runNear(){
+  const addr = document.getElementById('near').value.trim();
+  const msg  = document.getElementById('nearMsg');
+  if(!addr){ msg.textContent = 'Type an address, or use "Pick on map".'; return; }
+  msg.textContent = 'Finding that address…';
+  try{
+    const hit = await geocodeAddress(addr);
+    setCenter(hit.lat, hit.lng, hit.label);
+  }catch(e){
+    msg.innerHTML = 'Could not find that address. Try adding the city and ZIP, ' +
+                    'or use <b style="color:var(--text-primary)">Pick on map</b>.';
+  }
+}
+
+document.getElementById('goNear').onclick = runNear;
+document.getElementById('near').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); runNear(); }});
+document.getElementById('clearNear').onclick = clearNear;
+document.getElementById('radius').onchange = ()=>{ if(CENTER) setCenter(CENTER.lat, CENTER.lng, CENTER.label); };
+document.getElementById('pickMap').onclick = ()=>{
+  PICKING = !PICKING;
+  document.getElementById('pickMap').classList.toggle('on', PICKING);
+  document.getElementById('nearMsg').textContent = PICKING ? 'Now click anywhere on the map.' : '';
+  document.getElementById('map').style.cursor = PICKING ? 'crosshair' : '';
+};
+map.on('click', e=>{
+  if(!PICKING) return;
+  PICKING = false;
+  document.getElementById('pickMap').classList.remove('on');
+  document.getElementById('map').style.cursor = '';
+  document.body.classList.remove('sideopen');
+  setCenter(e.latlng.lat, e.latlng.lng, 'Dropped pin');
+});
 let zt=null;
 map.on('zoomend',()=>{clearTimeout(zt);zt=setTimeout(draw,60)});
 
