@@ -156,12 +156,35 @@ body.present .pop dl{font-size:14px}
 #gateMsg{margin-top:14px;font-size:13px;min-height:19px;color:var(--crit)}
 #gateMsg.busy{color:var(--text-muted)}
 body.locked #app{display:none}
+
+/* ---------- phones: the sidebar slides away so the map is usable ---------- */
+#filters{display:none}
+#closeSide{display:none;position:absolute;top:10px;right:10px;z-index:5;width:34px;height:34px;
+  border-radius:8px;border:1px solid var(--line);background:var(--surface-2);color:var(--text-primary);
+  font-size:21px;line-height:1;cursor:pointer;padding:0}
+#sideScrim{display:none;position:absolute;inset:0;z-index:900;background:rgba(0,0,0,.5)}
+@media (max-width: 860px){
+  #side{position:absolute;left:0;top:0;bottom:0;z-index:1200;width:86vw;max-width:340px;flex-basis:auto;
+    transform:translateX(-102%);transition:transform .26s ease;box-shadow:0 0 40px rgba(0,0,0,.6)}
+  body.sideopen #side{transform:translateX(0)}
+  body.sideopen #sideScrim{display:block}
+  #closeSide{display:block}
+  #filters{display:inline-block}
+  #mapwrap{width:100%}
+  #topbar{top:auto;bottom:14px;right:12px;left:12px;justify-content:flex-end;gap:8px}
+  #count{font-size:12px;padding:6px 10px}
+  .btn{padding:10px 15px}
+  .leaflet-popup-content{width:min(78vw,300px)!important}
+  #legend{bottom:70px;left:12px;max-width:190px;padding:9px 11px}
+}
+@media (max-width: 860px) and (display-mode: browser){ #side{display:flex} }
 .dim{filter:grayscale(.35) brightness(.72) contrast(1.05)}
 </style></head>
 <body data-palette="#3987e5,#d95926" class="locked">
 
 <div id="gate">
   <video id="bg" autoplay muted loop playsinline preload="auto" poster="hero.jpg" aria-hidden="true" tabindex="-1">
+    <source src="hero.webm" type="video/webm">
     <source src="hero.mp4" type="video/mp4">
   </video>
   <div id="scrim" aria-hidden="true"></div>
@@ -177,6 +200,7 @@ body.locked #app{display:none}
 </div>
 <div id="app">
 <aside id="side">
+  <button id="closeSide" aria-label="Close filters">&times;</button>
   <div id="brand">
     <h1>AptOffer</h1>
     <p>Updated August 19, 2026</p>
@@ -259,8 +283,10 @@ body.locked #app{display:none}
 
 <div id="mapwrap">
   <div id="map"></div>
+  <div id="sideScrim"></div>
   <div id="count"></div>
   <div id="topbar">
+    <button class="btn" id="filters">Filters</button>
     <button class="btn" id="fit">Fit to results</button>
   </div>
   <div id="legend"></div>
@@ -487,6 +513,21 @@ $('fit').onclick = ()=>{
   const pts=[...shownLive,...shownSold].map(r=>[r.y,r.x]);
   if(pts.length) map.fitBounds(L.latLngBounds(pts).pad(.05));
 };
+
+// On a phone the sidebar covers the whole screen, so it starts closed and
+// slides in only when "Filters" is tapped.
+(function(){
+  const open  = ()=>document.body.classList.add('sideopen');
+  const close = ()=>document.body.classList.remove('sideopen');
+  const fb=document.getElementById('filters');
+  const cb=document.getElementById('closeSide');
+  const sc=document.getElementById('sideScrim');
+  if(fb) fb.onclick=()=>{ document.body.classList.toggle('sideopen'); setTimeout(()=>map.invalidateSize(),300); };
+  if(cb) cb.onclick=()=>{ close(); setTimeout(()=>map.invalidateSize(),300); };
+  if(sc) sc.onclick=()=>{ close(); setTimeout(()=>map.invalidateSize(),300); };
+  // tapping a pin should reveal the map, not the filter panel
+  map.on('click popupopen', close);
+})();
 let zt=null;
 map.on('zoomend',()=>{clearTimeout(zt);zt=setTimeout(draw,60)});
 
