@@ -178,6 +178,31 @@ body.locked #app{display:none}
   #legend{bottom:70px;left:12px;max-width:190px;padding:9px 11px}
 }
 @media (max-width: 860px) and (display-mode: browser){ #side{display:flex} }
+
+#listPanel{position:absolute;top:0;right:0;bottom:0;width:400px;z-index:1100;background:var(--surface-1);
+  border-left:1px solid var(--line);display:none;flex-direction:column;box-shadow:-8px 0 34px rgba(0,0,0,.45)}
+body.listopen #listPanel{display:flex}
+#listHead{padding:13px 15px 12px;border-bottom:1px solid var(--line);flex:0 0 auto}
+.lrow1{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.lrow1 strong{font-size:14px;font-variant-numeric:tabular-nums}
+#listClose{background:transparent;border:0;color:var(--text-muted);font-size:23px;line-height:1;
+  cursor:pointer;padding:0 4px}
+#listClose:hover{color:var(--text-primary)}
+#listBody{overflow-y:auto;flex:1}
+.lrow{display:block;width:100%;text-align:left;background:transparent;border:0;
+  border-bottom:1px solid var(--line);padding:11px 15px;cursor:pointer;color:var(--text-primary);font:inherit}
+.lrow:hover{background:var(--surface-2)}
+.lrow .a{font-size:13.5px;font-weight:600;letter-spacing:-.01em;line-height:1.3}
+.lrow .c{font-size:11.5px;color:var(--text-muted);margin-top:1px}
+.lrow .m{display:flex;gap:6px 13px;margin-top:6px;font-size:12px;color:var(--text-secondary);
+  font-variant-numeric:tabular-nums;flex-wrap:wrap}
+.lrow .m span{white-space:nowrap}
+.lrow .m b{color:var(--text-primary);font-weight:600}
+.stale{color:var(--warn)!important}
+.lempty{padding:26px 15px;color:var(--text-muted);font-size:13px;text-align:center}
+@media (max-width:860px){
+  #listPanel{width:100%;left:0;top:0;bottom:0;border-left:0}
+}
 .dim{filter:grayscale(.35) brightness(.72) contrast(1.05)}
 </style></head>
 <body data-palette="#3987e5,#d95926" class="locked">
@@ -306,7 +331,27 @@ body.locked #app{display:none}
   <div id="count"></div>
   <div id="topbar">
     <button class="btn" id="filters">Filters</button>
+    <button class="btn" id="listBtn">List</button>
     <button class="btn" id="fit">Fit to results</button>
+  </div>
+  <div id="listPanel" aria-hidden="true">
+    <div id="listHead">
+      <div class="lrow1">
+        <strong id="listCount">0 listings</strong>
+        <button id="listClose" aria-label="Close list">&times;</button>
+      </div>
+      <select id="sortBy">
+        <option value="d_desc">Days on market — longest first</option>
+        <option value="d_asc">Days on market — newest first</option>
+        <option value="p_desc">Price — high to low</option>
+        <option value="p_asc">Price — low to high</option>
+        <option value="ppu_asc">Price per unit — low to high</option>
+        <option value="ppu_desc">Price per unit — high to low</option>
+        <option value="cr_desc">Cap rate — high to low</option>
+        <option value="u_desc">Units — most first</option>
+      </select>
+    </div>
+    <div id="listBody"></div>
   </div>
   <div id="legend"></div>
 </div>
@@ -449,6 +494,7 @@ function popupSold(r){
 let shownLive=[], shownSold=[];
 function draw(){
   layer.clearLayers();
+  MARKERS = [];
   const zoom = map.getZoom(), showLabels = zoom>=14;
   shownLive = S.live ? L_.filter(r=>{r._k='L';return passes(r)}) : [];
   shownSold = S.sold ? C_.filter(r=>{r._k='C';return passes(r)}) : [];
@@ -464,6 +510,8 @@ function draw(){
       radius: isLive?6:5, color:'#141413', weight:1.5, opacity:1,
       fillColor:col, fillOpacity: isLive?.95:.85
     });
+    m.__r = r;
+    if(isLive) MARKERS.push(m);
     m.bindPopup(isLive?popupLive(r):popupSold(r),{maxWidth:340});
     const lab = labelFor(r);
     if(showLabels && lab) m.bindTooltip(`<span class="chip">${lab}</span>`,
@@ -473,7 +521,7 @@ function draw(){
   shownSold.forEach(r=>add(r,false));
   shownLive.forEach(r=>add(r,true));
 
-  renderStats(); renderLegend(q); renderCount(showLabels);
+  renderStats(); renderLegend(q); renderCount(showLabels); renderList();
 }
 
 function med(a){ const v=a.filter(x=>x!=null&&!isNaN(x)).sort((x,y)=>x-y);
@@ -651,6 +699,60 @@ map.on('click', e=>{
   document.body.classList.remove('sideopen');
   setCenter(e.latlng.lat, e.latlng.lng, 'Dropped pin');
 });
+
+/* ============ sortable results list ============ */
+const SORTS = {
+  d_desc:  (a,b)=> (b.d ?? -1) - (a.d ?? -1),
+  d_asc:   (a,b)=> (a.d ??  1e9) - (b.d ??  1e9),
+  p_desc:  (a,b)=> (b.p ?? -1) - (a.p ?? -1),
+  p_asc:   (a,b)=> (a.p ??  1e15) - (b.p ??  1e15),
+  ppu_asc: (a,b)=> (a.ppu ?? 1e15) - (b.ppu ?? 1e15),
+  ppu_desc:(a,b)=> (b.ppu ?? -1) - (a.ppu ?? -1),
+  cr_desc: (a,b)=> (b.cr ?? -1) - (a.cr ?? -1),
+  u_desc:  (a,b)=> (b.u ?? -1) - (a.u ?? -1)
+};
+
+function renderList(){
+  if(!document.body.classList.contains('listopen')) return;
+  const rows = shownLive.slice().sort(SORTS[$('sortBy').value] || SORTS.d_desc);
+  $('listCount').textContent = rows.length + (rows.length===1?' listing':' listings');
+  if(!rows.length){ $('listBody').innerHTML = '<div class="lempty">Nothing matches those filters.</div>'; return; }
+  $('listBody').innerHTML = rows.map((r,i)=>{
+    const bits = [];
+    const chip = h => '<span>'+h+'</span>';   // each metric is one flex item, so it can't split
+    if(r.u) bits.push(chip('<b>'+r.u+'</b> units'));
+    if(r.p) bits.push(chip('<b>'+fmtM(r.p)+'</b>'));
+    if(r.ppu) bits.push(chip('<b>'+fmtK(r.ppu)+'</b>/unit'));
+    else if(r.ppsf) bits.push(chip('<b>$'+r.ppsf+'</b>/sf'));
+    if(r.cr) bits.push(chip('<b>'+r.cr.toFixed(2)+'%</b> cap'));
+    if(r.d!=null) bits.push(chip('<b class="'+(r.d>=120?'stale':'')+'">'+r.d+'</b> days'));
+    return '<button class="lrow" data-i="'+i+'">'
+      + '<div class="a">'+r.a+'</div><div class="c">'+r.c+(r.z?' '+r.z:'')+'</div>'
+      + '<div class="m">'+bits.join('')+'</div></button>';
+  }).join('');
+  [...$('listBody').querySelectorAll('.lrow')].forEach(btn=>{
+    btn.onclick = ()=>{
+      const r = rows[+btn.dataset.i];
+      map.setView([r.y, r.x], Math.max(map.getZoom(), 16), {animate:true});
+      const hit = layerFor(r);
+      if(hit) setTimeout(()=>hit.openPopup(), 260);
+      if(window.innerWidth <= 860) closeList();
+    };
+  });
+}
+
+// find the marker that belongs to a row so clicking the list opens its popup
+let MARKERS = [];
+function layerFor(r){ return MARKERS.find(m => m.__r === r) || null; }
+
+function openList(){ document.body.classList.add('listopen'); renderList();
+  setTimeout(()=>map.invalidateSize(), 260); }
+function closeList(){ document.body.classList.remove('listopen');
+  setTimeout(()=>map.invalidateSize(), 260); }
+
+$('listBtn').onclick  = ()=> document.body.classList.contains('listopen') ? closeList() : openList();
+$('listClose').onclick = closeList;
+$('sortBy').onchange   = renderList;
 let zt=null;
 map.on('zoomend',()=>{clearTimeout(zt);zt=setTimeout(draw,60)});
 
