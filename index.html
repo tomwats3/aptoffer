@@ -203,6 +203,36 @@ body.listopen #listPanel{display:flex}
 @media (max-width:860px){
   #listPanel{width:100%;left:0;top:0;bottom:0;border-left:0}
 }
+
+#reqBtn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+#reqWrap{position:absolute;inset:0;z-index:2000;display:none;align-items:center;justify-content:center;
+  background:rgba(8,8,7,.72);padding:20px;overflow-y:auto}
+body.reqopen #reqWrap{display:flex}
+#reqCard{position:relative;width:100%;max-width:520px;background:var(--surface-1);
+  border:1px solid var(--line);border-radius:16px;padding:26px 26px 22px;
+  box-shadow:0 26px 70px rgba(0,0,0,.6);margin:auto}
+#reqClose{position:absolute;top:12px;right:14px;background:transparent;border:0;color:var(--text-muted);
+  font-size:25px;line-height:1;cursor:pointer;padding:2px 6px}
+#reqClose:hover{color:var(--text-primary)}
+#reqCard h2{margin:0 0 6px;font-size:19px;letter-spacing:-.02em}
+.reqSub{margin:0 0 16px;font-size:13px;color:var(--text-muted);line-height:1.5}
+#reqCriteria{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;
+  padding:12px 14px;margin-bottom:15px;font-size:12.5px;line-height:1.65;color:var(--text-secondary)}
+#reqCriteria b{color:var(--text-primary);font-weight:600}
+#reqCriteria .none{color:var(--text-muted);font-style:italic}
+.reqGrid{display:flex;gap:9px;margin-bottom:9px}
+.reqGrid>*{flex:1;min-width:0}
+#reqCard input,#reqCard textarea{width:100%;background:var(--surface-2);border:1px solid var(--line);
+  border-radius:9px;padding:10px 12px;font:inherit;font-size:14px;color:var(--text-primary);
+  margin-bottom:9px;resize:vertical}
+#reqCard input:focus,#reqCard textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
+#reqSend{width:100%;background:var(--accent);color:#fff;border:0;border-radius:9px;padding:12px;
+  font:inherit;font-size:15px;font-weight:600;cursor:pointer;margin-top:4px}
+#reqSend:hover{filter:brightness(1.08)}
+#reqSend:disabled{opacity:.55;cursor:default}
+.reqMsg{margin:11px 0 0;font-size:13px;min-height:18px;text-align:center;color:var(--good)}
+.reqMsg.bad{color:var(--crit)}
+@media (max-width:860px){ #reqCard{padding:24px 18px 18px} .reqGrid{flex-direction:column;gap:0} }
 .dim{filter:grayscale(.35) brightness(.72) contrast(1.05)}
 </style></head>
 <body data-palette="#3987e5,#d95926" class="locked">
@@ -332,6 +362,7 @@ body.listopen #listPanel{display:flex}
   <div id="topbar">
     <button class="btn" id="filters">Filters</button>
     <button class="btn" id="listBtn">List</button>
+    <button class="btn on" id="reqBtn">Request listings</button>
     <button class="btn" id="fit">Fit to results</button>
   </div>
   <div id="listPanel" aria-hidden="true">
@@ -353,6 +384,23 @@ body.listopen #listPanel{display:flex}
     </div>
     <div id="listBody"></div>
   </div>
+<div id="reqWrap" aria-hidden="true">
+  <div id="reqCard" role="dialog" aria-modal="true" aria-labelledby="reqTitle">
+    <button id="reqClose" aria-label="Close">&times;</button>
+    <h2 id="reqTitle">Send me listings like this</h2>
+    <p class="reqSub">Set the filters to what you're looking for, then tell me where to reach you.
+      I'll send matching properties as they hit the market.</p>
+    <div id="reqCriteria"></div>
+    <div class="reqGrid">
+      <input type="text" id="reqName" placeholder="Your name" autocomplete="name">
+      <input type="email" id="reqEmail" placeholder="Email" autocomplete="email">
+    </div>
+    <input type="text" id="reqPhone" placeholder="Phone (optional)" autocomplete="tel">
+    <textarea id="reqNote" rows="3" placeholder="Anything else? (1031 timing, submarkets, value-add vs stabilised…)"></textarea>
+    <button id="reqSend">Send request</button>
+    <p class="reqMsg" id="reqMsg"></p>
+  </div>
+</div>
   <div id="legend"></div>
 </div>
 </div>
@@ -753,6 +801,110 @@ function closeList(){ document.body.classList.remove('listopen');
 $('listBtn').onclick  = ()=> document.body.classList.contains('listopen') ? closeList() : openList();
 $('listClose').onclick = closeList;
 $('sortBy').onchange   = renderList;
+
+/* ============ buyer request ============
+   The filters ARE the form. Whatever they have set is captured verbatim, so the
+   request arrives as a real buy box instead of "multifamily, good returns".
+
+   FORM_ENDPOINT: leave '' and the button opens a pre-filled email (works with no
+   setup at all). Paste a Formspree endpoint here and it posts silently instead. */
+const FORM_ENDPOINT = '';
+const TO = ['tom.watkins','centadv.com'].join('@');   // assembled to slow down scrapers
+
+function criteriaList(){
+  const v = id => (document.getElementById(id).value || '').trim();
+  // reads naturally whichever end of the range they filled in
+  const range = (lo, hi, f) =>
+      lo && hi ? f(lo) + ' to ' + f(hi)
+    : lo       ? f(lo) + ' and above'
+    :            'up to ' + f(hi);
+  const money = x => fmtM(+x), thou = x => fmtK(+x),
+        pct = x => (+x) + '%',   psf = x => '$' + (+x) + '/SF';
+  const out = [];
+  if(CENTER) out.push(['Location', 'within ' + document.getElementById('radius').value +
+      ' miles of ' + (CENTER.label || 'a point on the map')]);
+  if(v('q'))        out.push(['Text search', v('q')]);
+  if(v('fType'))    out.push(['Property type', v('fType')]);
+  if(v('fStatus'))  out.push(['Status', v('fStatus')]);
+  if(v('pMin')||v('pMax')) out.push(['Price', range(v('pMin'), v('pMax'), money)]);
+  if(v('uMin'))     out.push(['Units', v('uMin') + ' and above']);
+  if(v('crMin')||v('crMax')) out.push(['Cap rate', range(v('crMin'), v('crMax'), pct)]);
+  if(v('ppuMin')||v('ppuMax')) out.push(['Price per unit', range(v('ppuMin'), v('ppuMax'), thou)]);
+  if(v('psfMin')||v('psfMax')) out.push(['Price per SF', range(v('psfMin'), v('psfMax'), psf)]);
+  if(v('dMax'))     out.push(['Days on market', 'no more than ' + v('dMax')]);
+  return out;
+}
+
+function paintCriteria(){
+  const c = criteriaList();
+  document.getElementById('reqCriteria').innerHTML = c.length
+    ? '<b>Matching right now: ' + shownLive.length + ' listings</b><br>' +
+      c.map(x => x[0] + ': <b>' + x[1] + '</b>').join('<br>')
+    : '<span class="none">No filters set — this would request everything on the market. '
+      + 'Close this, narrow it down, and reopen.</span>';
+}
+
+function requestBody(){
+  const g = id => (document.getElementById(id).value || '').trim();
+  const c = criteriaList();
+  return [
+    'New buyer request from aptoffer.com', '',
+    'Name:  ' + (g('reqName') || '—'),
+    'Email: ' + (g('reqEmail') || '—'),
+    'Phone: ' + (g('reqPhone') || '—'), '',
+    'CRITERIA',
+    ...(c.length ? c.map(x => '  ' + x[0] + ': ' + x[1]) : ['  (none set)']),
+    '  Matching at time of request: ' + shownLive.length + ' listings', '',
+    'NOTES',
+    '  ' + (g('reqNote') || '—'), '',
+    'Sent ' + new Date().toLocaleString()
+  ].join('\n');
+}
+
+window.__requestBody = () => requestBody();
+document.getElementById('reqBtn').onclick = ()=>{
+  paintCriteria();
+  document.getElementById('reqMsg').textContent = '';
+  document.body.classList.add('reqopen');
+  document.body.classList.remove('sideopen');
+};
+document.getElementById('reqClose').onclick = ()=> document.body.classList.remove('reqopen');
+document.getElementById('reqWrap').addEventListener('click', e=>{
+  if(e.target.id === 'reqWrap') document.body.classList.remove('reqopen');
+});
+
+document.getElementById('reqSend').onclick = async ()=>{
+  const msg = document.getElementById('reqMsg');
+  const name = document.getElementById('reqName').value.trim();
+  const email = document.getElementById('reqEmail').value.trim();
+  msg.className = 'reqMsg';
+  if(!name){ msg.className='reqMsg bad'; msg.textContent='Please add your name.'; return; }
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ msg.className='reqMsg bad'; msg.textContent='Please add a valid email.'; return; }
+
+  const body = requestBody();
+  const subject = 'Buyer request — ' + name;
+
+  if(FORM_ENDPOINT){
+    const btn = document.getElementById('reqSend');
+    btn.disabled = true; msg.textContent = 'Sending…';
+    try{
+      const r = await fetch(FORM_ENDPOINT, {method:'POST', headers:{'Content-Type':'application/json', 'Accept':'application/json'},
+        body: JSON.stringify({name, email, phone:document.getElementById('reqPhone').value.trim(),
+                              _subject: subject, message: body})});
+      if(!r.ok) throw new Error(r.status);
+      msg.textContent = 'Sent. I\'ll be in touch.';
+      btn.disabled = false;
+      setTimeout(()=>document.body.classList.remove('reqopen'), 1600);
+    }catch(e){
+      btn.disabled = false; msg.className='reqMsg bad';
+      msg.textContent = 'Could not send. Please email ' + TO + ' directly.';
+    }
+  }else{
+    window.location.href = 'mailto:' + TO + '?subject=' + encodeURIComponent(subject)
+                         + '&body=' + encodeURIComponent(body);
+    msg.textContent = 'Opening your email app — press send there to finish.';
+  }
+};
 let zt=null;
 map.on('zoomend',()=>{clearTimeout(zt);zt=setTimeout(draw,60)});
 
