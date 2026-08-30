@@ -317,6 +317,11 @@ body.reqopen #reqWrap{display:flex}
 
       <h2>Filter</h2>
       <input type="text" id="q" placeholder="Search address or city…" style="margin-bottom:8px">
+      <select id="fMarket" style="margin-bottom:8px">
+        <option value="">All markets</option>
+        <option value="CA">Los Angeles</option>
+        <option value="NV">Las Vegas</option>
+      </select>
       <select id="fType" style="margin-bottom:8px"><option value="">All property types</option></select>
       <select id="fStatus" style="margin-bottom:8px"><option value="">All statuses</option></select>
       <div class="pair" style="margin-bottom:8px">
@@ -459,6 +464,7 @@ function rampColor(x,q){
 function passes(r){
   const q=$('q').value.trim().toLowerCase();
   if(q && !((r.a+' '+r.c+' '+r.z).toLowerCase().includes(q))) return false;
+  if($('fMarket').value && (r.m||'CA')!==$('fMarket').value) return false;
   if(r._k==='L'){
     if($('fType').value && r.t!==$('fType').value) return false;
     if($('fStatus').value && r.st!==$('fStatus').value) return false;
@@ -627,9 +633,15 @@ $('reset').onclick = ()=>{
   ['q','pMin','pMax','uMin','dMax','crMin','crMax','ppuMin','ppuMax','psfMin','psfMax'].forEach(i=>$(i).value='');
   $('keepBlank').checked=false;
   if(CENTER) clearNear();
-  ['fType','fStatus'].forEach(i=>$(i).value='');
+  ['fMarket','fType','fStatus'].forEach(i=>$(i).value='');
   draw();
 };
+$('fMarket').onchange = ()=>{
+  draw();
+  const pts=[...shownLive,...shownSold].map(r=>[r.y,r.x]);
+  if(pts.length) map.fitBounds(L.latLngBounds(pts).pad(.05));
+};
+
 $('fit').onclick = ()=>{
   const pts=[...shownLive,...shownSold].map(r=>[r.y,r.x]);
   if(pts.length) map.fitBounds(L.latLngBounds(pts).pad(.05));
@@ -824,6 +836,7 @@ function criteriaList(){
   if(CENTER) out.push(['Location', 'within ' + document.getElementById('radius').value +
       ' miles of ' + (CENTER.label || 'a point on the map')]);
   if(v('q'))        out.push(['Text search', v('q')]);
+  if(v('fMarket'))  out.push(['Market', $('fMarket').selectedOptions[0].text]);
   if(v('fType'))    out.push(['Property type', v('fType')]);
   if(v('fStatus'))  out.push(['Status', v('fStatus')]);
   if(v('pMin')||v('pMax')) out.push(['Price', range(v('pMin'), v('pMax'), money)]);
