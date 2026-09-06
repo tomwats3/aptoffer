@@ -430,8 +430,8 @@ uniq(L_, r=>r.st).forEach(v=>$('fStatus').add(new Option(v,v)));
 
 // ---- map ----
 const map = L.map('map',{zoomControl:true,preferCanvas:true}).setView([33.98,-118.30],11);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
-  maxZoom:19, attribution:'&copy; OpenStreetMap contributors &copy; CARTO'
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',{
+  maxZoom:16, attribution:'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ'
 }).addTo(map);
 const layer = L.layerGroup().addTo(map);
 
